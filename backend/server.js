@@ -7,6 +7,7 @@ import { body, validationResult } from 'express-validator';
 import { auth } from './middleware/auth.js';
 import supabase from './supabase.js';
 import authRouter from './routes/auth.js';
+import agentRouter from './agents/router/agentRouter.js';
 
 // Load environment variables
 dotenv.config();
@@ -29,6 +30,7 @@ function getOpenAI() {
 
 // Routes
 app.use('/auth', authRouter);
+app.use('/agents', agentRouter);
 
 // Login endpoint
 app.post('/login', [
