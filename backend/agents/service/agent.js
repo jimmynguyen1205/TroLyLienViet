@@ -4,9 +4,18 @@ import memoryService from './memory.js';
 
 class AgentService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    // Không khởi tạo OpenAI ở constructor
+    this.openai = null;
+  }
+
+  // Khởi tạo OpenAI client khi cần
+  initializeOpenAI() {
+    if (!this.openai) {
+      this.openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      });
+    }
+    return this.openai;
   }
 
   // Get agent configuration
@@ -38,8 +47,9 @@ class AgentService {
         }
       ];
 
-      // Get response from GPT
-      const response = await this.openai.chat.completions.create({
+      // Khởi tạo OpenAI client và gọi API
+      const openai = this.initializeOpenAI();
+      const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages,
         temperature: 0.7,

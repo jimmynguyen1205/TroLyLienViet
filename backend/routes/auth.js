@@ -264,11 +264,76 @@ router.post('/register', [
   }
 });
 
-// Verify token route
-router.get('/verify', auth, (req, res) => {
-  res.json({
-    user: req.user
-  });
+// Verify token and return user info
+router.get('/verify', async (req, res) => {
+  try {
+    // Get token from header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Không tìm thấy token' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Get user info from Supabase
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select(`
+        id,
+        full_name,
+        email,
+        role_id,
+        roles (
+          name,
+          description
+        )
+      `)
+      .eq('id', decoded.userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(401).json({ error: 'Không tìm thấy người dùng' });
+    }
+
+    // Check if user is active
+    if (!user.is_active) {
+      return res.status(401).json({ error: 'Tài khoản đã bị khóa' });
+    }
+
+    // Check if session is valid
+    const { data: session, error: sessionError } = await supabase
+      .from('user_sessions')
+      .select('*')
+      .eq('token', token)
+      .eq('is_active', true)
+      .single();
+
+    if (sessionError || !session) {
+      return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ' });
+    }
+
+    // Return user info
+    res.json({
+      id: user.id,
+      fullName: user.full_name,
+      email: user.email,
+      role: user.roles.name,
+      roleDescription: user.roles.description
+    });
+
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Token không hợp lệ' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token đã hết hạn' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Logout route

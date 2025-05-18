@@ -1,94 +1,63 @@
-import supabase from '../../supabase.js';
+import { supabase } from '../../config/supabase.js';
 
-class MemoryService {
-  constructor() {
-    this.memoryCache = new Map(); // Cache for active conversations
-  }
+const memoryService = {
+  // Add a new message to chat logs
+  async addMessage(userId, agentName, role, content) {
+    try {
+      const { data, error } = await supabase
+        .from('chat_logs')
+        .insert([
+          {
+            user_id: userId,
+            agent_id: agentName,
+            role: role,
+            content: content
+          }
+        ])
+        .select();
 
-  // Get chat history for a user and agent
-  async getChatHistory(userId, agentId, limit = 10) {
+      if (error) throw error;
+      return data[0];
+    } catch (error) {
+      console.error('Error adding message:', error);
+      throw error;
+    }
+  },
+
+  // Get chat history for a specific agent
+  async getChatHistory(userId, agentName) {
     try {
       const { data, error } = await supabase
         .from('chat_logs')
         .select('*')
         .eq('user_id', userId)
-        .eq('agent_id', agentId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+        .eq('agent_id', agentName)
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
-
-      // Update cache
-      const cacheKey = `${userId}-${agentId}`;
-      this.memoryCache.set(cacheKey, data);
-
       return data;
     } catch (error) {
       console.error('Error getting chat history:', error);
-      return [];
+      throw error;
     }
-  }
+  },
 
-  // Add new message to chat history
-  async addMessage(userId, agentId, role, content) {
-    try {
-      const { data, error } = await supabase
-        .from('chat_logs')
-        .insert([{
-          user_id: userId,
-          agent_id: agentId,
-          role,
-          content,
-          created_at: new Date()
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Update cache
-      const cacheKey = `${userId}-${agentId}`;
-      const history = this.memoryCache.get(cacheKey) || [];
-      history.unshift(data);
-      this.memoryCache.set(cacheKey, history.slice(0, 10));
-
-      return data;
-    } catch (error) {
-      console.error('Error adding message:', error);
-      return null;
-    }
-  }
-
-  // Clear chat history for a user and agent
-  async clearHistory(userId, agentId) {
+  // Clear chat history for a specific agent
+  async clearHistory(userId, agentName) {
     try {
       const { error } = await supabase
         .from('chat_logs')
         .delete()
         .eq('user_id', userId)
-        .eq('agent_id', agentId);
+        .eq('agent_id', agentName);
 
       if (error) throw error;
-
-      // Clear cache
-      const cacheKey = `${userId}-${agentId}`;
-      this.memoryCache.delete(cacheKey);
-
       return true;
     } catch (error) {
       console.error('Error clearing history:', error);
-      return false;
+      throw error;
     }
   }
+};
 
-  // Get conversation context for GPT
-  async getConversationContext(userId, agentId) {
-    const history = await this.getChatHistory(userId, agentId);
-    return history.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
-  }
-}
-
-export default new MemoryService(); 
+export default memoryService; 

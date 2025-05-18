@@ -3,17 +3,18 @@ import supabase from '../supabase.js';
 
 export const auth = async (req, res, next) => {
   try {
-    // Get token from header
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({ error: 'Không tìm thấy token xác thực' });
+    // Lấy token từ header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Không tìm thấy token' });
     }
 
-    // Verify token
+    const token = authHeader.split(' ')[1];
+
+    // Xác thực token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Check if token exists in database
+    // Kiểm tra session trong database
     const { data: session, error: sessionError } = await supabase
       .from('user_sessions')
       .select('*')
@@ -24,23 +25,12 @@ export const auth = async (req, res, next) => {
       return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ' });
     }
 
-    // Check if token is expired
+    // Kiểm tra token hết hạn
     if (new Date(session.expires_at) < new Date()) {
-      return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn' });
+      return res.status(401).json({ error: 'Token đã hết hạn' });
     }
 
-    // Check if device matches
-    if (session.device_info !== req.headers['user-agent']) {
-      return res.status(401).json({ error: 'Thiết bị không khớp với phiên đăng nhập' });
-    }
-
-    // Update last activity
-    await supabase
-      .from('user_sessions')
-      .update({ last_activity: new Date() })
-      .eq('token', token);
-
-    // Get user info
+    // Lấy thông tin user
     const { data: user, error: userError } = await supabase
       .from('users')
       .select(`
@@ -60,12 +50,7 @@ export const auth = async (req, res, next) => {
       return res.status(401).json({ error: 'Không tìm thấy người dùng' });
     }
 
-    // Check if user is active
-    if (!user.is_active) {
-      return res.status(401).json({ error: 'Tài khoản đã bị khóa' });
-    }
-
-    // Add user info to request
+    // Thêm thông tin user vào request
     req.user = {
       id: user.id,
       email: user.email,
@@ -76,7 +61,13 @@ export const auth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error('Auth error:', error);
-    res.status(401).json({ error: 'Xác thực thất bại' });
+    console.error('Auth middleware error:', error);
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Token không hợp lệ' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token đã hết hạn' });
+    }
+    res.status(500).json({ error: 'Lỗi xác thực' });
   }
 }; 

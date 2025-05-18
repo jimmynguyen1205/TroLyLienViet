@@ -7,8 +7,8 @@ const router = express.Router();
 // Apply auth middleware to all routes
 router.use(auth);
 
-// Process message and route to appropriate agent
-router.post('/chat', agentController.processMessage);
+// Process message and get response from GPT
+router.post('/chat', agentController.chat);
 
 // Get chat history for a specific agent
 router.get('/history/:agentId', agentController.getChatHistory);
