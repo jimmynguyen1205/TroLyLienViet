@@ -126,6 +126,8 @@ app.post('/login', [
       }
     });
 
+    localStorage.setItem('token', token);
+
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -281,3 +283,29 @@ app.post('/chat', auth, async (req, res) => {
 app.listen(port, () => {
   console.log(`TROLYLIENVIET Server is running on port ${port}`);
 });
+
+// Gọi API gia hạn token mỗi 7 ngày
+setInterval(async () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    try {
+      const response = await fetch('/auth/refresh-token', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+    }
+  }
+}, 7 * 24 * 60 * 60 * 1000); // 7 ngày
+
+// Kiểm tra token khi load trang
+const token = localStorage.getItem('token');
+if (!token) {
+  window.location.href = '/login';
+}
