@@ -26,124 +26,100 @@ const agentNames = {
   'ai-tuyen-dung': 'Tuyển Dụng'
 };
 
+const AGENT_LABELS = {
+  'tongquan': 'Tổng Quan',
+  'hopdong': 'Hợp Đồng',
+  'daotao': 'Đào Tạo',
+  'claim': 'Bồi Thường',
+  'tuyendung': 'Tuyển Dụng',
+  'thunhap': 'Thu Nhập',
+  'tuvan': 'Tư Vấn',
+  'tuyengia': 'Tuyên Giá'
+};
+
+const AGENT_LIST = [
+  'tongquan', 'hopdong', 'daotao', 'claim', 'tuyendung', 'thunhap', 'tuvan', 'tuyengia'
+];
+
 class GeneralAgent {
   constructor() {
     this.model = null;
-    const template = `Bạn là AI Tổng của công ty bảo hiểm. Nhiệm vụ của bạn là phân tích câu hỏi và xác định nên chuyển đến AI nào phù hợp nhất.
+    this.detectPrompt = PromptTemplate.fromTemplate(
+      `Bạn là AI Tổng của công ty bảo hiểm. Hãy đọc câu hỏi và xác định agent phù hợp nhất để xử lý trong số các agent sau:
+${AGENT_LIST.map(a => `- ${a}: ${AGENT_LABELS[a]}`).join('\n')}
 
-Các AI hiện có:
-1. AI Hợp đồng: Xử lý các vấn đề về hợp đồng bảo hiểm, điều khoản, quyền lợi, nghĩa vụ, gia hạn, hủy hợp đồng.
-2. AI Đào tạo: Hướng dẫn và đào tạo nghiệp vụ, quy trình làm việc, kỹ năng bán hàng, chăm sóc khách hàng.
-3. AI Claim: Xử lý bồi thường, khiếu nại, hướng dẫn thủ tục, giải quyết tranh chấp.
-4. AI Tuyển dụng: Thông tin về tuyển dụng, phát triển nhân sự, chính sách nhân sự, đào tạo nội bộ.
+Câu hỏi: {question}
 
-Câu hỏi của người dùng: {question}
-
-Hãy phân tích và trả về JSON với format:
-{
-  "suggested_agent": "tên_agent_phù_hợp_nhất",
-  "reason": "lý do tại sao chọn agent này",
-  "confidence": 0.85
-}
-
-Chỉ trả về JSON, không thêm text khác.`;
-
-    this.promptTemplate = PromptTemplate.fromTemplate(template);
+Trả về JSON với format:
+{"suggested_agent": "agent_tên_phù_hợp", "reason": "lý do", "confidence": 0.9}
+Chỉ trả về JSON, không thêm text khác.`
+    );
   }
 
-  // Khởi tạo OpenAI client khi cần
   initializeOpenAI() {
-    try {
       if (!this.model) {
         const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-          console.error('OpenAI API key not found in environment variables');
-          throw new Error('OpenAI API key not found in environment variables');
-        }
-        this.model = new OpenAI({ 
-          apiKey,
-          modelName: 'gpt-3.5-turbo',
-          temperature: 0.7
-        });
+      if (!apiKey) throw new Error('OpenAI API key not found');
+      this.model = new OpenAI({ apiKey, modelName: 'gpt-3.5-turbo', temperature: 0.7 });
       }
       return this.model;
-    } catch (error) {
-      console.error('Error initializing OpenAI:', error);
-      throw error;
-    }
   }
 
-  async analyzeQuestion(question) {
+  async detectAgent(message) {
     try {
       const model = this.initializeOpenAI();
-      const prompt = await this.promptTemplate.format({ question });
+      const prompt = await this.detectPrompt.format({ question: message });
       const response = await model.invoke(prompt);
       const result = JSON.parse(response.content);
-
-      // Map tên agent từ suggestion sang agent_name
-      const suggestedAgentName = agentMap[result.suggested_agent];
-      if (!suggestedAgentName) {
-        throw new Error('Invalid suggested agent');
-      }
-
-      return {
-        suggested_agent: suggestedAgentName,
-        reason: result.reason,
-        confidence: result.confidence
-      };
-    } catch (error) {
-      console.error('Error analyzing question:', error);
-      return {
-        suggested_agent: 'ai-hop-dong',
-        reason: 'Không thể phân tích câu hỏi, chuyển đến AI Hợp đồng',
-        confidence: 0.5
-      };
+      // Chuẩn hóa tên agent
+      let agent = (result.suggested_agent || '').toLowerCase();
+      if (!AGENT_LIST.includes(agent)) agent = 'tongquan';
+      return { agent, reason: result.reason, confidence: result.confidence };
+    } catch (err) {
+      console.error('detectAgent error:', err);
+      return { agent: 'tongquan', reason: 'Không xác định được agent', confidence: 0 };
     }
   }
 
-  async handleQuestion(question, userId, userName, userRole) {
-    try {
-      // Phân tích câu hỏi
-      const analysis = await this.analyzeQuestion(question);
-
-      // Nếu độ tin cậy > 0.75, chuyển đến agent chuyên môn
-      if (analysis.confidence > 0.75) {
-        // Tạo câu chào mừng
-        const welcomeMessage = `📌 Câu hỏi của bạn liên quan đến bộ phận ${agentNames[analysis.suggested_agent]}. Tôi sẽ kết nối bạn ngay nhé…\n\n`;
-
-        // Gọi agent chuyên môn
-        const agentResponse = await this.callSpecializedAgent(question, analysis.suggested_agent, userId, userName, userRole);
-
-        // Ghép câu chào và câu trả lời
+  async handleQuestion(message, userId, userName, userRole, agent_name = 'tongquan') {
+    // Nếu agent là tongquan, thực hiện detectAgent
+    if (agent_name === 'tongquan') {
+      const detection = await this.detectAgent(message);
+      if (detection.agent !== 'tongquan' && detection.confidence > 0.6) {
+        // Trả lời user về việc chuyển tuyến
+        const notify = `Câu hỏi của bạn sẽ được chuyển đến bộ phận ${AGENT_LABELS[detection.agent]}, tôi sẽ kết nối bạn...`;
+        // Gọi lại agent chuyên môn (nội bộ)
+        const agentResponse = await this.callSpecializedAgent(message, detection.agent, userId, userName, userRole);
+        // Kết hợp phản hồi
         return {
-          response: welcomeMessage + agentResponse.response,
-          intent: agentResponse.intent,
-          agent: agentResponse.agent,
-          suggestion: analysis
+          response: notify + '\n\n' + (agentResponse.response || ''),
+          agent: detection.agent,
+          suggestion: detection,
+          detail: agentResponse
         };
+      } else {
+        // Nếu không đề xuất agent khác, AI Tổng xử lý như thường
+        return await this.handleGeneral(message, userId, userName, userRole);
       }
-
-      // Nếu độ tin cậy <= 0.75, yêu cầu làm rõ
-      return {
-        response: "Tôi chưa chắc chắn bạn đang hỏi về nghiệp vụ nào. Bạn có thể nói rõ hơn không?",
-        intent: 'hỏi_làm_rõ',
-        agent: {
-          name: 'AI Tổng',
-          description: 'Phân tích và chuyển tuyến câu hỏi',
-          icon: '🤖'
-        },
-        suggestion: analysis
-      };
-    } catch (error) {
-      console.error('Error handling question:', error);
-      throw error;
+    } else {
+      // Nếu không phải tongquan, xử lý như thường
+      return await this.handleGeneral(message, userId, userName, userRole, agent_name);
     }
+  }
+
+  async handleGeneral(message, userId, userName, userRole, agent_name = 'tongquan') {
+    // Ở đây bạn có thể giữ logic AI Tổng hiện tại hoặc đơn giản trả về phản hồi mẫu
+    // (Có thể mở rộng để gọi GPT trả lời tổng quan nếu muốn)
+    return {
+      response: `AI Tổng đang xử lý câu hỏi: "${message}"`,
+      agent: agent_name
+    };
   }
 
   async callSpecializedAgent(message, agent_name, userId, userName, userRole) {
     try {
       // Gọi API /agents/chat với agent chuyên môn
-      const response = await fetch('http://localhost:3005/agents/chat', {
+      const response = await fetch('http://localhost:3000/agents/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -157,15 +133,11 @@ Chỉ trả về JSON, không thêm text khác.`;
           userRole
         })
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to call specialized agent');
-      }
-
+      if (!response.ok) throw new Error('Failed to call specialized agent');
       return await response.json();
     } catch (error) {
       console.error('Error calling specialized agent:', error);
-      throw error;
+      return { response: 'Không thể kết nối tới agent chuyên môn.' };
     }
   }
 }

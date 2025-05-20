@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node backend/server.js",
-    "dev": "nodemon backend/server.js"
+    "dev": "react-scripts start"
   },
   "dependencies": {
     "@langchain/openai": "^0.0.14",
