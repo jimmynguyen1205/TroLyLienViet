@@ -40,6 +40,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/auth', authRouter);
 app.use('/agents', agentRouter);
+app.use('/agent', agentRouter);
 
 // Login endpoint
 app.post('/login', [
@@ -94,7 +95,7 @@ app.post('/login', [
         role: user.roles.name
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
+      { expiresIn: '30d' }
     );
 
     // Create session

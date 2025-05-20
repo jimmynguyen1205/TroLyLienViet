@@ -20,7 +20,7 @@ async function getToken() {
           description
         )
       `)
-      .eq('email', 'test@gmail.com')
+      .eq('email', 'tiasang09@gmail.com')
       .single();
 
     if (userError) {
@@ -36,7 +36,7 @@ async function getToken() {
         role: user.roles.name
       },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '30d' }
     );
 
     // Create session in database

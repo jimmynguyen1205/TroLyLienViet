@@ -61,7 +61,7 @@ router.post('/login', [
         role: user.role_id
       },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '30d' }
     );
 
     // Ghi lại phiên đăng nhập (tùy chọn)
